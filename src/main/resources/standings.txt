@@ -1,0 +1,17 @@
+# Team name, Golds, Silvers, Bronzes, Score
+Green Ducks, 2, 2, 0, 164
+Raspberry Racers, 0, 3, 3, 153
+Hazers, 2, 1, 3, 151
+Savage Speeders, 2, 0, 1, 122
+Midnight Wisps, 2, 1, 0, 107
+Crazy Cat's Eyes, 1, 0, 2, 107
+Mellow Yellow, 1, 0, 1, 107
+Team Galactic, 0, 1, 0, 106
+O'Rangers, 0, 1, 0, 93
+Jungle Jumpers, 1, 0, 1, 90
+Chocolatiers, 0, 1, 1, 87
+Thunderbolts, 0, 1, 0, 83
+Pinkies, 1, 1, 0, 80
+Balls of Chaos, 0, 0, 0, 77
+Indigo Stars, 0, 0, 0, 71
+Oceanics, 0, 0, 0, 61
