@@ -123,7 +123,7 @@ private fun createVisualization(fileName: String, teamName: String, teamStat: Te
         yAxisTitle("Probability")
     }.build()
 
-    chart.addSeries("possibilities", teamStat.second.mapIndexed { i, _ -> i.toDouble() }, teamStat.second)
+    chart.addSeries("possibilities", teamStat.second.mapIndexed { i, _ -> (i + 1).toDouble() }, teamStat.second)
     chart.styler.isLegendVisible = false
 
     BitmapEncoder.saveBitmapWithDPI(chart, fileName, BitmapEncoder.BitmapFormat.PNG, 300)
