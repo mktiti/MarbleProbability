@@ -6,6 +6,8 @@ import com.xenomachina.argparser.mainBody
 import org.knowm.xchart.BitmapEncoder
 import org.knowm.xchart.CategoryChartBuilder
 import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 private data class TeamStanding(
@@ -59,13 +61,54 @@ private fun toPosition(standing: Standings): List<Int> =
         .sortedWith(standingSorter)
         .map { it.second }
 
-private fun approximate(startStanding: Standings, remainingCount: Int, scoring: Scoring, iterations: Int, threadCount: Int): List<TeamStat> {
-    fun emptyData() = startStanding.map { IntArray(startStanding.size) }
+private class Approximation(val teamCount: Int) {
 
+    private var iterations = 0
+    private val perTeamRanks = ArrayList<IntArray>(teamCount)
+
+    companion object {
+        fun collect(approximations: Collection<Approximation>): Approximation =
+            if (approximations.size == 1) {
+                approximations.first()
+            } else {
+                Approximation(approximations.first().teamCount).apply {
+                    approximations.forEach { part ->
+                        iterations += part.iterations
+                        perTeamRanks.forEachIndexed { teamIndex, ranking ->
+                            part.perTeamRanks[teamIndex].forEachIndexed { rank, value ->
+                                ranking[rank] += value
+                            }
+                        }
+                    }
+                }
+            }
+    }
+
+    init {
+        repeat(teamCount) {
+            perTeamRanks += IntArray(teamCount)
+        }
+    }
+
+    fun update(rankings: List<Int>) {
+        iterations++
+        rankings.forEachIndexed { index, teamIndex ->
+            perTeamRanks[teamIndex][index]++
+        }
+    }
+
+    fun teamStats(teamNames: List<String>): List<TeamStat> = perTeamRanks.zip(teamNames) { rank, name ->
+        name to rank.map { it.toDouble() / iterations }
+    }
+
+}
+
+private fun approximate(startStanding: Standings, remainingCount: Int, scoring: Scoring, iterations: Int, threadCount: Int): Approximation {
     val iterationsByThread = iterations / threadCount
+    val teamCount = startStanding.size
 
-    val threadData: List<Pair<Thread, List<IntArray>>> = (1 .. threadCount).map { t ->
-        val posCount = emptyData()
+    val threadData: List<Pair<Thread, Approximation>> = (1 .. threadCount).map { t ->
+        val approximation = Approximation(teamCount)
         val thread = thread(start = true) {
             val localIterations =
                 if (t == 1) (iterations - (threadCount - 1) * iterationsByThread) else iterationsByThread
@@ -76,29 +119,17 @@ private fun approximate(startStanding: Standings, remainingCount: Int, scoring: 
                 }
 
                 val finalStanding = simulateRemaining(startStanding, scoring, remainingCount)
-                toPosition(finalStanding).forEachIndexed { rank, teamIndex ->
-                    posCount[teamIndex][rank]++
-                }
+                approximation.update(toPosition(finalStanding))
             }
 
         }
-        thread to posCount
+        thread to approximation
     }
 
     threadData.forEach { it.first.join() }
     println("Approximation done!")
 
-    val finalPosCount = emptyData()
-    threadData.forEach { (_, posCountPartition) ->
-        posCountPartition.forEachIndexed { teamIndex, posCount ->
-            posCount.forEachIndexed { rank, value ->
-                finalPosCount[teamIndex][rank] += value
-            }
-        }
-    }
-    return startStanding.zip(finalPosCount) { initial, posCount ->
-        initial.name to posCount.map { it.toDouble() / iterations }
-    }
+    return Approximation.collect(threadData.map { it.second })
 }
 
 private fun standingFromFile(fileString: String): Standings {
@@ -116,18 +147,58 @@ private fun standingFromFile(fileString: String): Standings {
         }
 }
 
-private fun createVisualization(fileName: String, teamName: String, teamStat: TeamStat) {
+private fun createTeamVisualization(fileName: String, teamName: String, teamStat: List<Double>) {
     val chart = CategoryChartBuilder().apply {
         title("Probability distribution of $teamName's final place")
         xAxisTitle("Final place")
         yAxisTitle("Probability")
     }.build()
 
-    chart.addSeries("possibilities", teamStat.second.mapIndexed { i, _ -> (i + 1).toDouble() }, teamStat.second)
+    chart.addSeries("possibilities", teamStat.mapIndexed { i, _ -> (i + 1).toDouble() }, teamStat)
     chart.styler.isLegendVisible = false
+    chart.styler.antiAlias = true
 
     BitmapEncoder.saveBitmapWithDPI(chart, fileName, BitmapEncoder.BitmapFormat.PNG, 300)
 }
+
+private fun createSplitVisualization(fileName: String, namedApproximation: List<TeamStat>) {
+    val chart = CategoryChartBuilder().apply {
+        title("Probability distribution of final positions by team")
+        xAxisTitle("Final place")
+        yAxisTitle("Probability of each team")
+    }.build()
+
+    chart.styler.isStacked = true
+    chart.styler.antiAlias = true
+
+    val xValues = (1 .. namedApproximation.size).map { it.toDouble() }.toDoubleArray()
+    namedApproximation.forEach { (teamName, teamData) ->
+        chart.addSeries(teamName, xValues, teamData.toDoubleArray())
+    }
+
+    BitmapEncoder.saveBitmapWithDPI(chart, fileName, BitmapEncoder.BitmapFormat.PNG, 300)
+}
+
+private fun visualize(namedApprox: List<TeamStat>, outDir: String, await: Boolean = true) {
+    val executor = Executors.newCachedThreadPool()
+
+    executor.submit {
+        createSplitVisualization(outDir + File.separator + "Combined.png", namedApprox)
+    }
+
+    namedApprox.forEach { (teamName, teamStat) ->
+        executor.submit {
+            createTeamVisualization(outDir + File.separator + "$teamName.png", teamName, teamStat)
+        }
+    }
+
+    executor.shutdown()
+
+    if (await) {
+        executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
+    }
+}
+
 
 class Arguments(parser: ArgParser) {
 
@@ -146,15 +217,30 @@ class Arguments(parser: ArgParser) {
 fun main(args: Array<String>) {
     mainBody {
         ArgParser(args).parseInto(::Arguments).run {
+            if (!File(outDir).isDirectory) {
+                print("Output director '$outDir' not found, attempting to create it... ")
+                if (File(outDir).mkdir()) {
+                    println("success!")
+                } else {
+                    println("error!\nExiting")
+                    return@mainBody
+                }
+            }
+
             val standing = standingFromFile(standingFile)
-            val approxResult = approximate(standing, remainingCount, defaultScoring, iterations, threadCount)
-            approxResult.forEach { teamStat ->
-                val teamName = teamStat.first
-                println(teamStat.second.joinToString(prefix = "$teamName:") {
+            val approximation = approximate(standing, remainingCount, defaultScoring, iterations, threadCount)
+            val teamNames = standing.map(TeamStanding::name)
+            val namedApprox = approximation.teamStats(teamNames)
+
+            namedApprox.forEach { (teamName, teamStat) ->
+                println(teamStat.joinToString(prefix = "$teamName: ") {
                     String.format("%.6f", 100 * it) + "%"
                 })
-                createVisualization(outDir + File.separator + "$teamName.png", teamName, teamStat)
             }
+
+            println("Creating charts...")
+            visualize(namedApprox, outDir)
+            println("All done!")
         }
     }
 }

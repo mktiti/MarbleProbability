@@ -1,4 +1,5 @@
 # Team name, Golds, Silvers, Bronzes, Score
+# The order of the teams does not matter
 Green Ducks, 2, 2, 0, 164
 Raspberry Racers, 0, 3, 3, 153
 Hazers, 2, 1, 3, 151
