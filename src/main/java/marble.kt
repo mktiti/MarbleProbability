@@ -12,7 +12,6 @@ import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
-import kotlin.random.Random
 
 private data class Team(
     val name: String,
@@ -147,7 +146,7 @@ private fun standingFromFile(fileString: String): Standings {
         color = if (!hex.isNullOrBlank()) {
             Color.decode(hex)
         } else {
-            val random = Random(name.hashCode())
+            val random = Random(name.hashCode().toLong())
             Color(random.nextFloat(), random.nextFloat(), random.nextFloat())
         }
     )
