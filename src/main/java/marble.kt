@@ -5,13 +5,22 @@ import com.xenomachina.argparser.default
 import com.xenomachina.argparser.mainBody
 import org.knowm.xchart.BitmapEncoder
 import org.knowm.xchart.CategoryChartBuilder
+import org.knowm.xchart.style.Styler
+import java.awt.Color
 import java.io.File
+import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import kotlin.random.Random
+
+private data class Team(
+    val name: String,
+    val color: Color
+)
 
 private data class TeamStanding(
-    val name: String,
+    val team: Team,
     val points: Int,
     val golds: Int = 0,
     val silvers: Int = 0,
@@ -30,7 +39,7 @@ private data class TeamStanding(
 
 private typealias Standings = List<TeamStanding>
 private typealias Scoring = List<Int>
-private typealias TeamStat = Pair<String, List<Double>>
+private typealias TeamStat = Pair<Team, List<Double>>
 
 private val defaultScoring
         = listOf(25, 20, 15, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
@@ -97,8 +106,8 @@ private class Approximation(val teamCount: Int) {
         }
     }
 
-    fun teamStats(teamNames: List<String>): List<TeamStat> = perTeamRanks.zip(teamNames) { rank, name ->
-        name to rank.map { it.toDouble() / iterations }
+    fun teamStats(teams: List<Team>): List<TeamStat> = perTeamRanks.zip(teams) { rank, team ->
+        team to rank.map { it.toDouble() / iterations }
     }
 
 }
@@ -133,12 +142,22 @@ private fun approximate(startStanding: Standings, remainingCount: Int, scoring: 
 }
 
 private fun standingFromFile(fileString: String): Standings {
+    fun team(name: String, hex: String?) = Team(
+        name = name,
+        color = if (!hex.isNullOrBlank()) {
+            Color.decode(hex)
+        } else {
+            val random = Random(name.hashCode())
+            Color(random.nextFloat(), random.nextFloat(), random.nextFloat())
+        }
+    )
+
     return File(fileString).readLines()
         .filterNot { it.trimStart().startsWith("#") }
         .map { line ->
             val split = line.split(",").map(String::trim)
             TeamStanding(
-                name = split[0],
+                team = team(split[0], split.getOrNull(5)),
                 golds = split[1].toInt(),
                 silvers = split[2].toInt(),
                 bronzes = split[3].toInt(),
@@ -147,16 +166,24 @@ private fun standingFromFile(fileString: String): Standings {
         }
 }
 
-private fun createTeamVisualization(fileName: String, teamName: String, teamStat: List<Double>) {
+private fun createTeamVisualization(fileName: String, teamName: String, teamStat: TeamStat) {
     val chart = CategoryChartBuilder().apply {
         title("Probability distribution of $teamName's final place")
         xAxisTitle("Final place")
         yAxisTitle("Probability")
     }.build()
 
-    chart.addSeries("possibilities", teamStat.mapIndexed { i, _ -> (i + 1).toDouble() }, teamStat)
-    chart.styler.isLegendVisible = false
-    chart.styler.antiAlias = true
+    chart.styler.apply {
+        isLegendVisible = false
+        antiAlias = true
+        isToolTipsEnabled = true
+        isToolTipsAlwaysVisible = true
+        toolTipType = Styler.ToolTipType.yLabels
+        yAxisDecimalPattern = "#.##%"
+        seriesColors = arrayOf(teamStat.first.color)
+    }
+
+    chart.addSeries("possibilities", teamStat.second.mapIndexed { i, _ -> (i + 1).toDouble() }, teamStat.second)
 
     BitmapEncoder.saveBitmapWithDPI(chart, fileName, BitmapEncoder.BitmapFormat.PNG, 300)
 }
@@ -168,12 +195,16 @@ private fun createSplitVisualization(fileName: String, namedApproximation: List<
         yAxisTitle("Probability of each team")
     }.build()
 
-    chart.styler.isStacked = true
-    chart.styler.antiAlias = true
+    chart.styler.apply {
+        isStacked = true
+        antiAlias = true
+        yAxisDecimalPattern = "#.##%"
+        seriesColors = namedApproximation.map { (team, _) -> team.color }.toTypedArray()
+    }
 
     val xValues = (1 .. namedApproximation.size).map { it.toDouble() }.toDoubleArray()
-    namedApproximation.forEach { (teamName, teamData) ->
-        chart.addSeries(teamName, xValues, teamData.toDoubleArray())
+    namedApproximation.forEach { (team, teamData) ->
+        chart.addSeries(team.name, xValues, teamData.toDoubleArray())
     }
 
     BitmapEncoder.saveBitmapWithDPI(chart, fileName, BitmapEncoder.BitmapFormat.PNG, 300)
@@ -186,7 +217,8 @@ private fun visualize(namedApprox: List<TeamStat>, outDir: String, await: Boolea
         createSplitVisualization(outDir + File.separator + "Combined.png", namedApprox)
     }
 
-    namedApprox.forEach { (teamName, teamStat) ->
+    namedApprox.forEach { teamStat ->
+        val teamName = teamStat.first.name
         executor.submit {
             createTeamVisualization(outDir + File.separator + "$teamName.png", teamName, teamStat)
         }
@@ -203,13 +235,9 @@ private fun visualize(namedApprox: List<TeamStat>, outDir: String, await: Boolea
 class Arguments(parser: ArgParser) {
 
     val standingFile by parser.storing("-f", "--standings-file", help = "File to load current standings from").default("standings.txt")
-
     val remainingCount by parser.storing("-r", "--remains", help = "Number of remaining events", transform = String::toInt).default(1)
-
     val threadCount by parser.storing("-t", "--threads", help = "Number of CPU threads to use for the simulation", transform = String::toInt).default(4)
-
     val iterations by parser.storing("-i", "--iterations", help = "Number of iterations to run", transform = String::toInt).default(1_000_000)
-
     val outDir by parser.storing("-o", "--out-dir", help = "Location to store the created charts").default("./")
 
 }
@@ -229,8 +257,8 @@ fun main(args: Array<String>) {
 
             val standing = standingFromFile(standingFile)
             val approximation = approximate(standing, remainingCount, defaultScoring, iterations, threadCount)
-            val teamNames = standing.map(TeamStanding::name)
-            val namedApprox = approximation.teamStats(teamNames)
+            val teams = standing.map(TeamStanding::team)
+            val namedApprox = approximation.teamStats(teams)
 
             namedApprox.forEach { (teamName, teamStat) ->
                 println(teamStat.joinToString(prefix = "$teamName: ") {

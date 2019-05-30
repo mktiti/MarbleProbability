@@ -1,18 +1,18 @@
-# Team name, Golds, Silvers, Bronzes, Score
+# Team name, Golds, Silvers, Bronzes, Score, Team color (hex code, optional)
 # The order of the teams does not matter
-Green Ducks, 2, 2, 0, 164
-Raspberry Racers, 0, 3, 3, 153
-Hazers, 2, 1, 3, 151
-Savage Speeders, 2, 0, 1, 122
-Midnight Wisps, 2, 1, 0, 107
-Crazy Cat's Eyes, 1, 0, 2, 107
-Mellow Yellow, 1, 0, 1, 107
-Team Galactic, 0, 1, 0, 106
-O'Rangers, 0, 1, 0, 93
-Jungle Jumpers, 1, 0, 1, 90
-Chocolatiers, 0, 1, 1, 87
-Thunderbolts, 0, 1, 0, 83
-Pinkies, 1, 1, 0, 80
-Balls of Chaos, 0, 0, 0, 77
-Indigo Stars, 0, 0, 0, 71
-Oceanics, 0, 0, 0, 61
+Green Ducks, 2, 2, 0, 164, #546615
+Raspberry Racers, 0, 3, 3, 153, #fe2f6d
+Hazers, 2, 1, 3, 151, #6a6a6a
+Savage Speeders, 2, 0, 1, 122, #502003
+Midnight Wisps, 2, 1, 0, 107, #76afc3
+Crazy Cat's Eyes, 1, 0, 2, 107, #cb0000
+Mellow Yellow, 1, 0, 1, 107, #ffc018
+Team Galactic, 0, 1, 0, 106, #d10ffa
+O'Rangers, 0, 1, 0, 93, #f87b03
+Jungle Jumpers, 1, 0, 1, 90, #1c480c
+Chocolatiers, 0, 1, 1, 87, #290604
+Thunderbolts, 0, 1, 0, 83, #45a6d9
+Pinkies, 1, 1, 0, 80, #f083b4
+Balls of Chaos, 0, 0, 0, 77, #e9b289
+Indigo Stars, 0, 0, 0, 71, #868fd4
+Oceanics, 0, 0, 0, 61, #095faf
